@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>YT → MP3</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;600&display=swap" rel="stylesheet" />
+  <style>
+    /* ── Reset & base ─────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0a0a0c;
+      --surface:   #111116;
+      --border:    #1e1e28;
+      --accent:    #ff3c3c;
+      --accent2:   #ff7c3c;
+      --text:      #e8e8f0;
+      --muted:     #6b6b80;
+      --success:   #3cffa0;
+      --mono:      'Space Mono', monospace;
+      --sans:      'DM Sans', sans-serif;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      overflow-x: hidden;
+    }
+
+    /* ── Grid noise texture overlay ───────────────────────────────────────── */
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background-image:
+        linear-gradient(rgba(255,60,60,.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,60,60,.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── Layout ───────────────────────────────────────────────────────────── */
+    .page {
+      position: relative;
+      z-index: 1;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 16px;
+    }
+
+    /* ── Header ───────────────────────────────────────────────────────────── */
+    header {
+      text-align: center;
+      margin-bottom: 48px;
+    }
+
+    .logo-mark {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .logo-icon {
+      width: 42px; height: 42px;
+      background: var(--accent);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 0 24px rgba(255,60,60,.5);
+      animation: pulse-glow 3s ease-in-out infinite;
+    }
+
+    @keyframes pulse-glow {
+      0%,100% { box-shadow: 0 0 24px rgba(255,60,60,.5); }
+      50%      { box-shadow: 0 0 40px rgba(255,60,60,.8); }
+    }
+
+    .logo-icon svg { width: 20px; height: 20px; fill: #fff; }
+
+    h1 {
+      font-family: var(--mono);
+      font-size: clamp(1.6rem, 5vw, 2.6rem);
+      letter-spacing: -1px;
+      line-height: 1;
+    }
+    h1 span { color: var(--accent); }
+
+    .tagline {
+      margin-top: 8px;
+      font-size: .85rem;
+      color: var(--muted);
+      letter-spacing: .15em;
+      text-transform: uppercase;
+      font-family: var(--mono);
+    }
+
+    /* ── Card ─────────────────────────────────────────────────────────────── */
+    .card {
+      width: 100%;
+      max-width: 580px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 36px 32px;
+      box-shadow: 0 32px 80px rgba(0,0,0,.6);
+    }
+
+    /* ── URL input row ────────────────────────────────────────────────────── */
+    .input-row {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .url-input {
+      flex: 1;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: .82rem;
+      outline: none;
+      transition: border-color .2s, box-shadow .2s;
+    }
+    .url-input::placeholder { color: var(--muted); }
+    .url-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(255,60,60,.12);
+    }
+
+    .btn-fetch {
+      padding: 14px 20px;
+      border-radius: 10px;
+      border: 1px solid var(--accent);
+      background: transparent;
+      color: var(--accent);
+      font-family: var(--mono);
+      font-size: .75rem;
+      cursor: pointer;
+      transition: background .2s, color .2s;
+      white-space: nowrap;
+    }
+    .btn-fetch:hover { background: var(--accent); color: #fff; }
+
+    /* ── Preview card ─────────────────────────────────────────────────────── */
+    .preview {
+      display: none;
+      gap: 14px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px;
+      margin-bottom: 20px;
+      animation: slide-in .3s ease;
+    }
+    .preview.visible { display: flex; }
+
+    @keyframes slide-in {
+      from { opacity: 0; transform: translateY(-8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .preview-thumb {
+      width: 90px; height: 56px;
+      border-radius: 6px;
+      object-fit: cover;
+      flex-shrink: 0;
+      background: var(--border);
+    }
+
+    .preview-meta { overflow: hidden; }
+    .preview-title {
+      font-size: .88rem;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .preview-sub {
+      margin-top: 4px;
+      font-size: .75rem;
+      color: var(--muted);
+      font-family: var(--mono);
+    }
+
+    /* ── Download button ──────────────────────────────────────────────────── */
+    .btn-download {
+      width: 100%;
+      padding: 16px;
+      border-radius: 10px;
+      border: none;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color: #fff;
+      font-family: var(--mono);
+      font-size: .9rem;
+      font-weight: 700;
+      letter-spacing: .05em;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+      transition: opacity .2s, transform .15s;
+    }
+    .btn-download:disabled { opacity: .5; cursor: not-allowed; }
+    .btn-download:not(:disabled):hover { transform: translateY(-2px); }
+    .btn-download:not(:disabled):active { transform: translateY(0); }
+
+    /* shimmer effect */
+    .btn-download::after {
+      content: '';
+      position: absolute; inset: 0;
+      background: linear-gradient(110deg, transparent 30%, rgba(255,255,255,.15) 50%, transparent 70%);
+      transform: translateX(-100%);
+      transition: transform .6s ease;
+    }
+    .btn-download:not(:disabled):hover::after { transform: translateX(100%); }
+
+    /* ── Progress bar ─────────────────────────────────────────────────────── */
+    .progress-wrap {
+      display: none;
+      margin-top: 18px;
+    }
+    .progress-wrap.visible { display: block; }
+
+    .progress-label {
+      font-family: var(--mono);
+      font-size: .72rem;
+      color: var(--muted);
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .progress-track {
+      height: 3px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      border-radius: 2px;
+      transition: width .4s ease;
+    }
+    .progress-bar.indeterminate {
+      width: 40%;
+      animation: slide-right 1.2s ease-in-out infinite;
+    }
+
+    @keyframes slide-right {
+      0%   { transform: translateX(-100%); }
+      100% { transform: translateX(300%); }
+    }
+
+    /* ── Status message ───────────────────────────────────────────────────── */
+    .status {
+      display: none;
+      margin-top: 16px;
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-family: var(--mono);
+      font-size: .78rem;
+      animation: slide-in .25s ease;
+    }
+    .status.visible { display: block; }
+    .status.success { background: rgba(60,255,160,.08); border: 1px solid rgba(60,255,160,.3); color: var(--success); }
+    .status.error   { background: rgba(255,60,60,.08);  border: 1px solid rgba(255,60,60,.3);  color: var(--accent); }
+    .status.info    { background: rgba(255,255,255,.04); border: 1px solid var(--border);       color: var(--muted); }
+
+    /* ── Tips section ─────────────────────────────────────────────────────── */
+    .tips {
+      margin-top: 36px;
+      font-size: .73rem;
+      color: var(--muted);
+      font-family: var(--mono);
+      text-align: center;
+      line-height: 1.8;
+    }
+    .tips span { color: var(--accent); }
+
+    /* ── Footer ───────────────────────────────────────────────────────────── */
+    footer {
+      margin-top: 48px;
+      font-size: .68rem;
+      color: #333;
+      font-family: var(--mono);
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <div class="logo-mark">
+      <div class="logo-icon">
+        <!-- Music note icon -->
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z"/>
+        </svg>
+      </div>
+      <h1>YT<span>→</span>MP3</h1>
+    </div>
+    <p class="tagline">Local · Fast · Free · 192 kbps</p>
+  </header>
+
+  <div class="card">
+
+    <!-- URL input -->
+    <div class="input-row">
+      <input
+        id="urlInput"
+        class="url-input"
+        type="url"
+        placeholder="https://youtube.com/watch?v=..."
+        autocomplete="off"
+        spellcheck="false"
+      />
+      <button class="btn-fetch" id="btnFetch">Preview</button>
+    </div>
+
+    <!-- Video preview -->
+    <div class="preview" id="preview">
+      <img id="previewThumb" class="preview-thumb" src="" alt="" />
+      <div class="preview-meta">
+        <div class="preview-title" id="previewTitle"></div>
+        <div class="preview-sub" id="previewSub"></div>
+      </div>
+    </div>
+
+    <!-- Download button -->
+    <button class="btn-download" id="btnDownload">
+      ↓ &nbsp; Download MP3
+    </button>
+
+    <!-- Progress -->
+    <div class="progress-wrap" id="progressWrap">
+      <div class="progress-label">
+        <span id="progressText">Processing…</span>
+        <span id="progressPct"></span>
+      </div>
+      <div class="progress-track">
+        <div class="progress-bar indeterminate" id="progressBar"></div>
+      </div>
+    </div>
+
+    <!-- Status -->
+    <div class="status" id="status"></div>
+
+  </div>
+
+  <div class="tips">
+    Paste any YouTube URL above &nbsp;·&nbsp;
+    Works with <span>videos</span>, <span>shorts</span> &amp; <span>music</span><br/>
+    Files are deleted from the server after 60 seconds
+  </div>
+
+  <footer>Running locally on port 5000 &nbsp;·&nbsp; yt-dlp + ffmpeg</footer>
+
+</div>
+
+<script>
+// ── Elements ───────────────────────────────────────────────────────────────
+const urlInput     = document.getElementById('urlInput');
+const btnFetch     = document.getElementById('btnFetch');
+const btnDownload  = document.getElementById('btnDownload');
+const preview      = document.getElementById('preview');
+const previewThumb = document.getElementById('previewThumb');
+const previewTitle = document.getElementById('previewTitle');
+const previewSub   = document.getElementById('previewSub');
+const progressWrap = document.getElementById('progressWrap');
+const progressBar  = document.getElementById('progressBar');
+const progressText = document.getElementById('progressText');
+const progressPct  = document.getElementById('progressPct');
+const statusEl     = document.getElementById('status');
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function showStatus(msg, type = 'info') {
+  statusEl.textContent = msg;
+  statusEl.className   = `status ${type} visible`;
+}
+function hideStatus() { statusEl.className = 'status'; }
+
+function showProgress(text = 'Processing…') {
+  progressText.textContent = text;
+  progressPct.textContent  = '';
+  progressBar.className    = 'progress-bar indeterminate';
+  progressWrap.className   = 'progress-wrap visible';
+}
+function hideProgress() { progressWrap.className = 'progress-wrap'; }
+
+function formatDuration(secs) {
+  if (!secs) return '';
+  const m = Math.floor(secs / 60), s = secs % 60;
+  return `${m}:${String(s).padStart(2,'0')}`;
+}
+
+// ── Fetch video info (preview) ─────────────────────────────────────────────
+btnFetch.addEventListener('click', fetchInfo);
+urlInput.addEventListener('keydown', e => { if (e.key === 'Enter') fetchInfo(); });
+
+async function fetchInfo() {
+  const url = urlInput.value.trim();
+  if (!url) { showStatus('Please paste a YouTube URL first.', 'error'); return; }
+
+  btnFetch.disabled    = true;
+  btnFetch.textContent = '…';
+  hideStatus();
+  preview.className = 'preview';  // hide
+
+  try {
+    const res  = await fetch('/info', {
+      method:  'POST',
+      headers: {'Content-Type': 'application/json'},
+      body:    JSON.stringify({ url }),
+    });
+    const data = await res.json();
+
+    if (!res.ok || data.error) {
+      showStatus(data.error || 'Could not fetch video info.', 'error');
+      return;
+    }
+
+    previewThumb.src        = data.thumbnail || '';
+    previewTitle.textContent = data.title    || 'Unknown title';
+    previewSub.textContent  = [data.uploader, formatDuration(data.duration)].filter(Boolean).join(' · ');
+    preview.className       = 'preview visible';
+    hideStatus();
+
+  } catch (err) {
+    showStatus('Network error – is Flask running?', 'error');
+  } finally {
+    btnFetch.disabled    = false;
+    btnFetch.textContent = 'Preview';
+  }
+}
+
+// ── Download MP3 ───────────────────────────────────────────────────────────
+btnDownload.addEventListener('click', async () => {
+  const url = urlInput.value.trim();
+  if (!url) { showStatus('Please paste a YouTube URL first.', 'error'); return; }
+
+  btnDownload.disabled = true;
+  hideStatus();
+  showProgress('Downloading & converting to MP3…');
+
+  try {
+    const res = await fetch('/download', {
+      method:  'POST',
+      headers: {'Content-Type': 'application/json'},
+      body:    JSON.stringify({ url }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      showStatus(data.error || `Server error (${res.status}).`, 'error');
+      return;
+    }
+
+    // Trigger browser download from the blob response
+    const blob        = await res.blob();
+    const disposition = res.headers.get('Content-Disposition') || '';
+    const match       = disposition.match(/filename\*?=(?:UTF-8'')?["']?([^"';\n]+)/i);
+    const filename    = match ? decodeURIComponent(match[1]) : 'audio.mp3';
+
+    const blobUrl = URL.createObjectURL(blob);
+    const a       = document.createElement('a');
+    a.href        = blobUrl;
+    a.download    = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 10_000);
+
+    showStatus(`✓ Downloaded: ${filename}`, 'success');
+
+  } catch (err) {
+    showStatus('Network error – is Flask running?', 'error');
+  } finally {
+    btnDownload.disabled = false;
+    hideProgress();
+  }
+});
+</script>
+</body>
+</html>
